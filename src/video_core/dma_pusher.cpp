@@ -226,7 +226,24 @@ bool DmaPusher::Step() {
                                !gpu_written &&
                                !(use_safe && memory_manager.IsMemoryDirty(dma_state.dma_get,
                                                                           header.size * sizeof(u32)));
-        if (!submitted && dma_pushbuffer_subindex < command_list.submitted_offsets.size()) {
+     // ORBITALS_DMA_TRACE_V1: diagnostic only, no change to command selection.
+if (header.size >= 0x1d0 && header.size <= 0x1e0) {
+    static std::atomic<u32> orbitals_dma_traces{};
+    if (orbitals_dma_traces.fetch_add(1, std::memory_order_relaxed) < 12) {
+        LOG_WARNING(HW_GPU,
+            "ORBITALS_DMA_TRACE addr={:#x} size={:#x} selected={} resume={} "
+            "snapshot={} suspensions={} gpu_written={} safe_read={} dirty={} deferred={}",
+            u64{header.addr}, u64{header.size},
+            submitted ? "submit-copy" : "live-memory",
+            command_resume_offset, command_list.snapshot_suspensions,
+            suspensions.load(std::memory_order_acquire), gpu_written, use_safe,
+            use_safe && memory_manager.IsMemoryDirty(dma_state.dma_get,
+                header.size * sizeof(u32)),
+            std::ranges::binary_search(command_list.deferred_entries,
+                static_cast<u32>(dma_pushbuffer_subindex)));
+    }
+}  
+      if (!submitted && dma_pushbuffer_subindex < command_list.submitted_offsets.size()) {
             // An entry parsed from memory instead of its submit-time copy is the way a command
             // ring the game already refilled gets read as this frame's commands (garbage methods,
             // unbound subchannels, render targets of absurd size). Count how often the words
