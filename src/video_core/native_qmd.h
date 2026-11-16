@@ -40,7 +40,7 @@ public:
                 if (states.size() >= 4096) return "QMD cache limit";
             }
             auto& state = states[request.address];
-            if (request.action == 3 || request.action == 2) {
+                if (request.action == 3 || request.action == 2) {
                 if (request.action == 3 || !state.loaded) {
                     if (!read(request.address, state.descriptor)) return "unmapped QMD";
                     const auto& qmd = state.descriptor;
@@ -79,17 +79,16 @@ public:
             const auto qmd = state.descriptor;
             if ((qmd[18] & 0xff) != 0x30 || (qmd[4] & 0x100)) return "unsupported QMD version or queue";
             // Validate the release slots before making any visible.
-            for (const Word base : ReleaseSlots) {
-                const Word flags = qmd[base + 1];
-                if (!(flags & (1U << 23))) continue;
-                const bool add = (flags & (1U << 26)) != 0;
-                if ((flags & (0x3bU << 24)) || (flags >> 30) != 1 ||
-                    (add && (flags & (7U << 20)))) return "unsupported QMD release format";
-                if (add) {
-                    if constexpr (!std::is_invocable_r_v<bool, Release, Address, Word, Word>)
-                        return "unsupported QMD reduction callback";
-                }
+            // ORBITALS_QMD_FIX_V1: Check supported QMD release formats.
+            const auto decodable_release = [](Word flags) {
+            const Word size = flags >> 30;
+            if (flags & (1U << 29)) return false;
+            if (flags & (1U << 26)) {
+            return size == 1 && ((flags >> 24) & 3) < 2;
             }
+            return size <= 1;
+            };
+    
             // A program Eden can't run is skipped, but the QMD still completes: its releases
             // are what other queues and the CPU wait on (the console never fails a launch).
             const bool dispatched = !(qmd[12] && (qmd[13] & 0xffff) && (qmd[14] & 0xffff)) || dispatch(qmd);
@@ -99,6 +98,13 @@ public:
             for (const Word base : ReleaseSlots) {
                 const Word flags = qmd[base + 1];
                 if (!(flags & (1U << 23))) continue;
+                    // ORBITALS_QMD_FIX_V1: Skip unsupported release formats.
+                if (!decodable_release(flags)) {
+                if (error.empty()) {
+                  error = "unsupported QMD release format";
+                }
+                continue;
+                }
                 const Address destination = (Address{flags & 0xff} << 32) | qmd[base];
                 bool released{};
                 if constexpr (std::is_invocable_r_v<bool, Release, Address, Word, Word>) {
