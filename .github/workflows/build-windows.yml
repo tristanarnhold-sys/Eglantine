@@ -1,3 +1,4 @@
+
 name: build-windows
 
 # Reusable: builds the Windows binaries. The MSVC build always runs; with pgo=both the MinGW clang
@@ -81,7 +82,7 @@ jobs:
           modules: qtcharts
           cache: true
 
-      # MSVC is not something ccache handles well, so this job uses sccache.
+      # MSVC uses sccache instead of ccache.
       - name: Install sccache on Windows
         shell: pwsh
         run: |
@@ -90,6 +91,16 @@ jobs:
           Expand-Archive $zip -DestinationPath (Join-Path $env:RUNNER_TEMP 'sccache')
           $bin = (Get-ChildItem -Recurse -Filter sccache.exe (Join-Path $env:RUNNER_TEMP 'sccache')).DirectoryName
           $bin | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
+
+      # ORBITALS FAST BUILD: Restore compiler results from previous runs.
+      - name: Restore MSVC compiler cache
+        id: sccache_restore
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.SCCACHE_DIR }}
+          key: orbitals-msvc-sccache-v1-${{ inputs.sha }}
+          restore-keys: |
+            orbitals-msvc-sccache-v1-
 
       - name: Install Vulkan SDK on Windows
         shell: pwsh
@@ -128,6 +139,14 @@ jobs:
           cmake --build build/release --target yuzu yuzu-cmd --parallel
           sccache --show-stats
 
+      # ORBITALS FAST BUILD: Save compiled objects for later runs.
+      - name: Save MSVC compiler cache
+        if: success() && steps.sccache_restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.SCCACHE_DIR }}
+          key: orbitals-msvc-sccache-v1-${{ inputs.sha }}
+
       - name: Package Windows binary
         shell: pwsh
         run: |
@@ -138,8 +157,7 @@ jobs:
           }
           windeployqt --release --no-translations build/release/bin/eglantine.exe
 
-      # The artifact is the bin folder itself: GitHub zips artifacts on download, and uploading a
-      # zip gave a zip inside a zip. The release job zips it once for the release.
+      # GitHub packages the artifact automatically.
       - name: Upload Windows binary
         uses: actions/upload-artifact@v7
         with:
@@ -190,8 +208,7 @@ jobs:
           set -euo pipefail
           test -s eglantine.profdata
 
-      # Eden builds its Windows PGO binaries with MSYS2's clang toolchain, so we do the same. The
-      # package list is docs/Deps.md (MSYS2) plus what the bundled FFmpeg needs to compile.
+      # Eden builds its Windows PGO binaries with MSYS2's clang toolchain, so we do the same.
       - name: Set up MSYS2
         uses: msys2/setup-msys2@v2
         with:
@@ -208,8 +225,7 @@ jobs:
             libusb:p unordered_dense:p jbigkit:p xz:p libdeflate:p bzip2:p
             lerc:p graphite2:p libwebp:p libtiff:p brotli:p ccache:p
 
-      # MinGW build: system Qt and libraries from MSYS2, clang plus the repo's PGO profile. The profile
-      # path is converted to its Windows form because clang runs with the MSYS mount underneath.
+      # MinGW build with system Qt and libraries from MSYS2.
       - name: Configure
         shell: msys2 {0}
         run: |
@@ -245,9 +261,7 @@ jobs:
           cmake --build build/release --target yuzu yuzu-cmd --parallel
           ccache --show-stats
 
-      # A dynamic MinGW build is not portable on its own: windeployqt6 brings the Qt libraries and
-      # plugins, then every non-system DLL the binaries and those plugins pull in gets copied next to
-      # them (docs/Caveats.md#msys2).
+      # Deploy Qt and non-system DLL dependencies.
       - name: Package MinGW binary
         shell: msys2 {0}
         run: |
@@ -263,7 +277,6 @@ jobs:
               [ -z "$dll" ] && continue
               source=$(command -v "$dll" 2>/dev/null || true)
               [ -z "$source" ] && continue
-              # The system DLLs ship with Windows, so they never need bundling.
               case "$source" in
                 *System32* | *SysWOW64*) continue ;;
               esac
