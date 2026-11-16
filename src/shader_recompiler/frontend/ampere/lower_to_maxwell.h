@@ -1442,7 +1442,7 @@ inline LoweredProgram LowerToMaxwellWith(std::span<const Instruction> code, u32 
             const u32 channels = insn.Bits(72, 4);
             const u32 mode = insn.words[2] & ~0xf00U;
             const bool strong = mode == 0x0010a000; // .STRONG.SM: fenced on both sides
-            if ((mode != 0x00100000 && !strong) || channels == 0 (dimension != 1 && (dimension < 3 || dimension > 5)) ||
+            if ((mode != 0x00100000 && !strong) || channels == 0 || (dimension != 1 && (dimension < 3 || dimension > 5)) ||
                 binding >= 18 || offset > 0x1fff || insn.Bits(59, 2) || data > 252 || coordinate > (dimension >= 4 ? 252U : 253U))
                 return fail(index, "native formatted surface store mode");
             // A second descriptor buffer: SUST.B with the handle, loaded from that buffer, in R250.
