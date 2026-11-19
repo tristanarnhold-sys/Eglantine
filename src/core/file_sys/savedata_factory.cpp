@@ -61,21 +61,39 @@ SaveDataFactory::SaveDataFactory(Core::System& system_, ProgramId program_id_,
 
 SaveDataFactory::~SaveDataFactory() = default;
 
+
 VirtualDir SaveDataFactory::Create(SaveDataSpaceId space, const SaveDataAttribute& meta) const {
     const auto save_directory = GetFullPath(program_id, dir, space, meta.type, meta.program_id,
                                             meta.user_id, meta.system_save_data_id);
 
-    return dir->CreateDirectoryRelative(save_directory);
+    auto result = dir->CreateDirectoryRelative(save_directory);
+
+    LOG_INFO(Service_FS,
+             "ORBITALS_SAVE_CREATE path={} success={}",
+             save_directory, result != nullptr);
+
+    return result;
 }
 
 VirtualDir SaveDataFactory::Open(SaveDataSpaceId space, const SaveDataAttribute& meta) const {
-
     const auto save_directory = GetFullPath(program_id, dir, space, meta.type, meta.program_id,
                                             meta.user_id, meta.system_save_data_id);
 
     auto out = dir->GetDirectoryRelative(save_directory);
 
+    LOG_INFO(Service_FS,
+             "ORBITALS_SAVE_OPEN path={} type={} space={} exists={} auto_create={}",
+             save_directory,
+             static_cast<u32>(meta.type),
+             static_cast<u32>(space),
+             out != nullptr,
+             auto_create);
+
     if (out == nullptr && (ShouldSaveDataBeAutomaticallyCreated(space, meta) && auto_create)) {
+        LOG_INFO(Service_FS,
+                 "ORBITALS_SAVE_AUTOCREATE path={}",
+                 save_directory);
+
         return Create(space, meta);
     }
 
