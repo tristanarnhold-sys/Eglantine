@@ -270,7 +270,10 @@ Result FSP_SRV::IsExFatSupported(Out<bool> out_is_supported) {
 Result FSP_SRV::OpenSaveDataFileSystem(OutInterface<IFileSystem> out_interface,
                                        FileSys::SaveDataSpaceId space_id,
                                        FileSys::SaveDataAttribute attribute) {
-    LOG_INFO(Service_FS, "called.");
+    LOG_INFO(Service_FS,
+             "ORBITALS_SAVE_TRACE space={}, {}",
+             static_cast<u32>(space_id),
+             attribute.DebugInfo());
 
     FileSys::VirtualDir dir{};
     R_TRY(save_data_controller->OpenSaveData(&dir, space_id, attribute));
